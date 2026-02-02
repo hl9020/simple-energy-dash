@@ -1,0 +1,42 @@
+{
+  "title": "Energy Monitor",
+  "meter_reading": "Meter reading",
+  "baseload": "Baseload",
+  "baseload_tooltip": "Minimum consumption between 02:00-05:00 (standby devices)",
+  "cost": "Cost",
+  "prognosis_prefix": "End of month forecast:",
+  "time_suffix": "",
+  "period": {
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "week": "7 Days",
+    "month": "Month",
+    "lastmonth": "Last Month",
+    "year": "Year",
+    "custom": "Range"
+  },
+  "prev_period": {
+    "today": "Yesterday",
+    "yesterday": "Day before",
+    "week": "Prev. week",
+    "month": "Prev. month",
+    "lastmonth": "2 months ago",
+    "year": "Prev. year",
+    "custom": "Prev. range"
+  },
+  "calendar": {
+    "months": ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
+    "months_short": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    "weekdays_short": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "weekdays_label": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+    "select_start": "Select start",
+    "select_end": "Select end",
+    "reset": "↺ Reset"
+  },
+  "chart": {
+    "consumption": "Consumption",
+    "avg": "Avg"
+  },
+  "number_locale": "en-US",
+  "cent_unit": "ct/kWh"
+}
