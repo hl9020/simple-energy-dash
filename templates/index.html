@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Energy Monitor</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-gauges@2.1.7/gauge.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="gauge-section">
+            <div class="gauge-wrap">
+                <canvas id="gauge"></canvas>
+            </div>
+            <div class="status-bar">
+                <div class="online-indicator">
+                    <div class="online-dot" id="onlineDot"></div>
+                    <span id="statusText">--</span>
+                </div>
+                <span>|</span>
+                <span id="lastUpdate">--:--:--</span>
+            </div>
+            <div class="total-kwh"><span id="meterLabel">Meter reading</span>: <span id="totalKwh">0</span> kWh</div>
+            <div class="baseload">
+                <span class="info-icon" id="baseloadInfo">ⓘ</span>
+                <span id="baseloadLabel">Baseload</span>: <span id="baseload">--</span> W
+                <div class="tooltip" id="baseloadTooltip"></div>
+            </div>
+        </div>
+        <div class="right-section">
+            <div class="period-btns">
+                <button data-period="today"></button>
+                <button data-period="yesterday"></button>
+                <button data-period="week"></button>
+                <button data-period="month"></button>
+                <button data-period="lastmonth"></button>
+                <button data-period="year"></button>
+                <button data-period="custom"></button>
+            </div>
+            <div class="range-cal" id="rangeCal">
+                <div class="cal-header">
+                    <button class="cal-nav" id="calPrev">‹</button>
+                    <span class="cal-title" id="calTitle"></span>
+                    <button class="cal-nav" id="calNext">›</button>
+                </div>
+                <div class="cal-grid" id="calDow"></div>
+                <div class="cal-days" id="calDays"></div>
+                <div class="cal-hint" id="calHint"></div>
+            </div>
+            <div class="period-tiles">
+                <div class="tile">
+                    <div class="label" id="rangeLabel"></div>
+                    <div class="value-row"><span class="value" id="rangeKwh">0</span><span class="unit">kWh</span></div>
+                    <div class="change" id="rangeChange"></div>
+                </div>
+                <div class="tile">
+                    <div class="label" id="costLabel">Cost</div>
+                    <div class="value-row"><span class="value" id="rangeCost">0</span><span class="unit" id="currencyUnit">€</span></div>
+                    <div class="sub" id="priceInfo"></div>
+                </div>
+            </div>
+            <div class="chart-wrap">
+                <div id="chartTooltip" class="chart-tooltip"></div>
+                <canvas id="history"></canvas>
+            </div>
+            <div class="prognose" id="prognoseBar"></div>
+        </div>
+    </div>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

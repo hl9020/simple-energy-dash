@@ -1,0 +1,29 @@
+# Environment
+.env
+__pycache__/
+*.pyc
+
+# Database
+instance/
+*.db
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+*.bak
+.vscode/
+.idea/
+
+# Python
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# Deployment (Pi-only)
+watchdog.py
+webhook.py
+
+# Logs
+*.log
