@@ -1,4 +1,4 @@
-let currentPeriod = new Date().getDate() <= 6 ? 'week' : 'month';
+let currentPeriod = 'today';
 let gauge = null;
 let chart = null;
 let gaugeConfig = { max: 7000, green: 300, yellow: 1000, orange: 2500 };
