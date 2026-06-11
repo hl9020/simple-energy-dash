@@ -109,13 +109,55 @@ def _register_at(ts):
     return max(candidates, key=lambda x: x[0])[1]
 
 
+def _register_floor():
+    """Frühester Zeitpunkt, ab dem Registerstände (total_kwh) vorliegen."""
+    floors = []
+    for model, col in ((Measurement, Measurement.timestamp),
+                       (MeasurementMinute, MeasurementMinute.timestamp),
+                       (MeasurementHour, MeasurementHour.timestamp),
+                       (MeasurementDay, MeasurementDay.timestamp)):
+        r = model.query.filter(model.total_kwh.isnot(None)).order_by(col.asc()).first()
+        if r:
+            floors.append(r.timestamp)
+    return min(floors) if floors else None
+
+
+def _legacy_kwh(start, end):
+    """Verbrauch aus historischen kwh_used-Summen (Bereiche ohne Registerstand)."""
+    total = 0.0
+    day_kwh = db.session.query(func.sum(MeasurementDay.kwh_used)).filter(
+        MeasurementDay.timestamp >= start, MeasurementDay.timestamp < end,
+        MeasurementDay.kwh_used.isnot(None)).scalar() or 0
+    total += day_kwh
+    day_last = MeasurementDay.query.filter(
+        MeasurementDay.timestamp >= start, MeasurementDay.timestamp < end
+    ).order_by(MeasurementDay.timestamp.desc()).first()
+    cursor = day_last.timestamp + timedelta(days=1) if day_last else start
+    hour_kwh = db.session.query(func.sum(MeasurementHour.kwh_used)).filter(
+        MeasurementHour.timestamp >= cursor, MeasurementHour.timestamp < end,
+        MeasurementHour.kwh_used.isnot(None)).scalar() or 0
+    total += hour_kwh
+    return total
+
+
 def get_kwh_for_range(start, end):
-    """kWh für [start, end) als reine Registerstand-Differenz - lückenlos, kein Grenzverlust."""
-    r_start = _register_at(start)
+    """kWh für [start, end). Registergenau wo total_kwh vorliegt, sonst Fallback auf kwh_used."""
+    floor = _register_floor()
+    if floor is None:
+        return _legacy_kwh(start, end)
+    if start >= floor:
+        r_start = _register_at(start)
+        r_end = _register_at(end)
+        if r_start is None or r_end is None:
+            return _legacy_kwh(start, end)
+        return max(0.0, r_end - r_start)
+    if end <= floor:
+        return _legacy_kwh(start, end)
+    legacy = _legacy_kwh(start, floor)
+    r_floor = _register_at(floor)
     r_end = _register_at(end)
-    if r_start is None or r_end is None:
-        return 0.0
-    return max(0.0, r_end - r_start)
+    reg = max(0.0, r_end - r_floor) if (r_floor is not None and r_end is not None) else 0.0
+    return legacy + reg
 
 
 def get_history_data(start, end, resolution):
