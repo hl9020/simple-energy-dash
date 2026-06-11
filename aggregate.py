@@ -38,13 +38,18 @@ def aggregate():
         power_avg FLOAT, power_max FLOAT, power_min FLOAT, total_kwh FLOAT)""")
     cur.execute("""CREATE TABLE IF NOT EXISTS measurement_hour (
         id INTEGER PRIMARY KEY, timestamp DATETIME, 
-        power_avg FLOAT, power_max FLOAT, power_min FLOAT, kwh_used FLOAT)""")
+        power_avg FLOAT, power_max FLOAT, power_min FLOAT, kwh_used FLOAT, total_kwh FLOAT)""")
     cur.execute("""CREATE TABLE IF NOT EXISTS measurement_day (
         id INTEGER PRIMARY KEY, timestamp DATETIME, 
-        power_avg FLOAT, power_max FLOAT, power_min FLOAT, kwh_used FLOAT)""")
+        power_avg FLOAT, power_max FLOAT, power_min FLOAT, kwh_used FLOAT, total_kwh FLOAT)""")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mm_ts ON measurement_minute(timestamp)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_mh_ts ON measurement_hour(timestamp)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_md_ts ON measurement_day(timestamp)")
+
+    for tbl in ("measurement_hour", "measurement_day"):
+        cols = [r[1] for r in cur.execute(f"PRAGMA table_info({tbl})").fetchall()]
+        if "total_kwh" not in cols:
+            cur.execute(f"ALTER TABLE {tbl} ADD COLUMN total_kwh FLOAT")
 
     
     cutoff_48h = now - timedelta(hours=48)
@@ -66,12 +71,15 @@ def aggregate():
     rows_min = cur.rowcount
     
     # 2. Minuten -> Stunden (älter als 7 Tage)
+    # End-Registerstand der Stunde speichern; kwh_used = Differenz zum
+    # vorherigen vorhandenen Registerstand (lückenlos, kein Grenzverlust).
     cur.execute("""
-        INSERT INTO measurement_hour (timestamp, power_avg, power_max, power_min, kwh_used)
+        INSERT INTO measurement_hour (timestamp, power_avg, power_max, power_min, kwh_used, total_kwh)
         SELECT 
             datetime(strftime('%Y-%m-%d %H:00:00', timestamp)),
             AVG(power_avg), MAX(power_max), MIN(power_min),
-            MAX(total_kwh) - MIN(total_kwh)
+            NULL,
+            MAX(total_kwh)
         FROM measurement_minute
         WHERE timestamp < ?
         AND datetime(strftime('%Y-%m-%d %H:00:00', timestamp)) NOT IN 
@@ -79,13 +87,24 @@ def aggregate():
         GROUP BY strftime('%Y-%m-%d %H', timestamp)
     """, (cutoff_7d.isoformat(),))
     rows_hour = cur.rowcount
+    cur.execute("""
+        UPDATE measurement_hour AS h SET kwh_used = h.total_kwh - (
+            SELECT p.total_kwh FROM measurement_hour AS p
+            WHERE p.timestamp < h.timestamp AND p.total_kwh IS NOT NULL
+            ORDER BY p.timestamp DESC LIMIT 1)
+        WHERE h.kwh_used IS NULL AND h.total_kwh IS NOT NULL
+        AND EXISTS (SELECT 1 FROM measurement_hour AS p
+            WHERE p.timestamp < h.timestamp AND p.total_kwh IS NOT NULL)
+    """)
     
     # 3. Stunden -> Tage (älter als 90 Tage)
     cur.execute("""
-        INSERT INTO measurement_day (timestamp, power_avg, power_max, power_min, kwh_used)
+        INSERT INTO measurement_day (timestamp, power_avg, power_max, power_min, kwh_used, total_kwh)
         SELECT 
             datetime(strftime('%Y-%m-%d 00:00:00', timestamp)),
-            AVG(power_avg), MAX(power_max), MIN(power_min), SUM(kwh_used)
+            AVG(power_avg), MAX(power_max), MIN(power_min),
+            NULL,
+            MAX(total_kwh)
         FROM measurement_hour
         WHERE timestamp < ?
         AND datetime(strftime('%Y-%m-%d 00:00:00', timestamp)) NOT IN 
@@ -93,6 +112,15 @@ def aggregate():
         GROUP BY strftime('%Y-%m-%d', timestamp)
     """, (cutoff_90d.isoformat(),))
     rows_day = cur.rowcount
+    cur.execute("""
+        UPDATE measurement_day AS d SET kwh_used = d.total_kwh - (
+            SELECT p.total_kwh FROM measurement_day AS p
+            WHERE p.timestamp < d.timestamp AND p.total_kwh IS NOT NULL
+            ORDER BY p.timestamp DESC LIMIT 1)
+        WHERE d.kwh_used IS NULL AND d.total_kwh IS NOT NULL
+        AND EXISTS (SELECT 1 FROM measurement_day AS p
+            WHERE p.timestamp < d.timestamp AND p.total_kwh IS NOT NULL)
+    """)
 
     
     # 4. Cleanup: Alte Rohdaten löschen (älter als 48h)

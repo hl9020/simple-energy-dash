@@ -58,6 +58,7 @@ class MeasurementHour(db.Model):
     power_max = db.Column(db.Float)
     power_min = db.Column(db.Float)
     kwh_used = db.Column(db.Float)
+    total_kwh = db.Column(db.Float)
 
 
 class MeasurementDay(db.Model):
@@ -67,6 +68,7 @@ class MeasurementDay(db.Model):
     power_max = db.Column(db.Float)
     power_min = db.Column(db.Float)
     kwh_used = db.Column(db.Float)
+    total_kwh = db.Column(db.Float)
 
 
 def format_weekday(dt):
@@ -92,55 +94,28 @@ def get_period_bounds(period, start_custom=None, end_custom=None):
     return periods.get(period, periods['today'])
 
 
+def _register_at(ts):
+    """Jüngster bekannter Registerstand (total_kwh) zum Zeitpunkt <= ts, über alle Quellen."""
+    candidates = []
+    for model, col in ((MeasurementDay, MeasurementDay.timestamp),
+                       (MeasurementHour, MeasurementHour.timestamp),
+                       (MeasurementMinute, MeasurementMinute.timestamp),
+                       (Measurement, Measurement.timestamp)):
+        r = model.query.filter(col <= ts, model.total_kwh.isnot(None)).order_by(col.desc()).first()
+        if r and r.total_kwh is not None:
+            candidates.append((r.timestamp, r.total_kwh))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda x: x[0])[1]
+
+
 def get_kwh_for_range(start, end):
-    """Berechnet kWh für Zeitraum [start, end) - kombiniert alle Quellen chronologisch."""
-    total = 0.0
-    cursor = start
-    
-    day_kwh = db.session.query(func.sum(MeasurementDay.kwh_used)).filter(
-        MeasurementDay.timestamp >= start, MeasurementDay.timestamp < end
-    ).scalar() or 0
-    total += day_kwh
-    
-    day_last = MeasurementDay.query.filter(
-        MeasurementDay.timestamp >= start, MeasurementDay.timestamp < end
-    ).order_by(MeasurementDay.timestamp.desc()).first()
-    cursor = day_last.timestamp + timedelta(days=1) if day_last else start
-    
-    hour_kwh = db.session.query(func.sum(MeasurementHour.kwh_used)).filter(
-        MeasurementHour.timestamp >= cursor, MeasurementHour.timestamp < end
-    ).scalar() or 0
-    total += hour_kwh
-    
-    hour_last = MeasurementHour.query.filter(
-        MeasurementHour.timestamp >= cursor, MeasurementHour.timestamp < end
-    ).order_by(MeasurementHour.timestamp.desc()).first()
-    cursor = hour_last.timestamp + timedelta(hours=1) if hour_last else cursor
-    
-    minute_first = MeasurementMinute.query.filter(
-        MeasurementMinute.timestamp >= cursor, MeasurementMinute.timestamp < end
-    ).order_by(MeasurementMinute.timestamp.asc()).first()
-    minute_last = MeasurementMinute.query.filter(
-        MeasurementMinute.timestamp >= cursor, MeasurementMinute.timestamp < end
-    ).order_by(MeasurementMinute.timestamp.desc()).first()
-    
-    if minute_first and minute_last and minute_first.id != minute_last.id:
-        total += minute_last.total_kwh - minute_first.total_kwh
-        cursor = minute_last.timestamp + timedelta(minutes=1)
-    elif minute_last:
-        cursor = minute_last.timestamp + timedelta(minutes=1)
-    
-    raw_first = Measurement.query.filter(
-        Measurement.timestamp >= cursor, Measurement.timestamp < end
-    ).order_by(Measurement.timestamp.asc()).first()
-    raw_last = Measurement.query.filter(
-        Measurement.timestamp >= cursor, Measurement.timestamp < end
-    ).order_by(Measurement.timestamp.desc()).first()
-    
-    if raw_first and raw_last and raw_first.id != raw_last.id:
-        total += raw_last.total_kwh - raw_first.total_kwh
-    
-    return total
+    """kWh für [start, end) als reine Registerstand-Differenz - lückenlos, kein Grenzverlust."""
+    r_start = _register_at(start)
+    r_end = _register_at(end)
+    if r_start is None or r_end is None:
+        return 0.0
+    return max(0.0, r_end - r_start)
 
 
 def get_history_data(start, end, resolution):
@@ -517,6 +492,12 @@ def api_stats_range():
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
+        from sqlalchemy import text
+        for tbl in ("measurement_hour", "measurement_day"):
+            cols = [r[1] for r in db.session.execute(text(f"PRAGMA table_info({tbl})"))]
+            if "total_kwh" not in cols:
+                db.session.execute(text(f"ALTER TABLE {tbl} ADD COLUMN total_kwh FLOAT"))
+        db.session.commit()
     
     if MQTT_AVAILABLE:
         threading.Thread(target=start_mqtt, daemon=True).start()
